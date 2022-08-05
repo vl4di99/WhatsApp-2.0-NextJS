@@ -6,15 +6,22 @@ import IconButton from "@mui/material/IconButton";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import SearchIcon from "@mui/icons-material/Search";
 import { getAuth, signOut } from "firebase/auth";
-import { addDoc, collection } from "firebase/firestore";
-import {db, auth} from "../firebase";
+import { addDoc, collection, query, where } from "firebase/firestore";
+import { db, auth } from "../firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
+import { useCollection } from "react-firebase-hooks/firestore";
+import Chat from "./Chat";
 
 function Sidebar() {
   const EmailValidator = require("email-validator");
   const [user] = useAuthState(auth);
+  const userChatRef = query(
+    collection(db, "chats"),
+    where("users", "array-contains", user.email)
+  ); //This searches for all the chats where the user's email matches in the database
+  const [chatsSnapshot] = useCollection(userChatRef);
 
-  const createChat = () => {
+  const createChat = async () => {
     const input = prompt(
       "Please enter an email address for the user you wish to chat with"
     );
@@ -23,11 +30,23 @@ function Sidebar() {
 
     if (EmailValidator.validate(input)) {
       //We need to add the chat to the "chats" collection from the database
-      await addDoc(collection(db, "chats"),{
-        users: [user.email, input]
-      })
+      if (input === user.email) {
+        alert("You can't use your own email!");
+      } else if (chatExists(input)) {
+        alert("Chat already exists!");
+      } else {
+        await addDoc(collection(db, "chats"), {
+          users: [user.email, input],
+        });
+      }
     }
   };
+
+  const chatExists = (recipientEmail) =>
+    !!chatsSnapshot?.docs.find(
+      (chat) =>
+        chat.data().users.find((user) => user === recipientEmail)?.length > 0
+    );
 
   return (
     <Container>
@@ -51,6 +70,9 @@ function Sidebar() {
         <SearchInput placeholder="Search in chat" />
       </Search>
       <SidebarButton onClick={createChat}>Start a new chat</SidebarButton>
+      {chatsSnapshot?.docs.map((chat) => (
+        <Chat key={chat.id} id={chat.id} users={chat.data().users} />
+      ))}
     </Container>
   );
 }
